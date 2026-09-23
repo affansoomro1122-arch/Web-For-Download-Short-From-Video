@@ -1,0 +1,793 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AIOS Storyboard</title>
+<style>
+  :root{
+    --bg:#f4f2ee; --dot:#d8d4cc; --ink:#1c1b19; --muted:#6f6a62;
+    --panel:#ffffff; --line:#e2ded6; --accent:#7C4DFF; --shadow:0 1px 2px rgba(0,0,0,.08),0 8px 24px rgba(0,0,0,.06);
+    --c-yellow:#fff3bf; --c-blue:#d0ebff; --c-green:#d3f9d8; --c-pink:#ffdeeb;
+    --c-purple:#e5dbff; --c-grey:#f1f3f5; --c-orange:#ffe8cc;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    font:14px/1.45 "Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    color:var(--ink);background:var(--bg);overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ---------- canvas ---------- */
+  #canvas{
+    position:fixed;inset:0;cursor:grab;
+    background-image:radial-gradient(var(--dot) 1px, transparent 1px);
+    background-repeat:repeat;
+  }
+  #canvas.panning{cursor:grabbing}
+  #world{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform}
+
+  /* ---------- cards ---------- */
+  .card{
+    position:absolute;background:var(--c-yellow);border-radius:8px;
+    box-shadow:var(--shadow);display:flex;flex-direction:column;
+    overflow:hidden;user-select:none;
+    border:2px solid transparent;
+  }
+  .card.sel{border-color:var(--accent);box-shadow:0 0 0 4px rgba(124,77,255,.15),var(--shadow)}
+  .card .t{
+    font-weight:650;font-size:14px;padding:10px 12px 2px;outline:none;
+    white-space:pre-wrap;word-break:break-word;
+  }
+  .card .b{
+    font-size:13px;color:#33312d;padding:2px 12px 12px;outline:none;flex:1;
+    white-space:pre-wrap;word-break:break-word;overflow:auto;
+  }
+  .card .t:empty::before{content:"Title";color:rgba(0,0,0,.25)}
+  .card .b:empty::before{content:"Notes…";color:rgba(0,0,0,.25)}
+  .card [contenteditable="true"]{user-select:text;cursor:text}
+  .card .rz{
+    position:absolute;right:0;bottom:0;width:16px;height:16px;cursor:nwse-resize;
+    opacity:0;transition:opacity .12s;
+  }
+  .card .rz::after{
+    content:"";position:absolute;right:4px;bottom:4px;width:7px;height:7px;
+    border-right:2px solid rgba(0,0,0,.35);border-bottom:2px solid rgba(0,0,0,.35);
+  }
+  .card:hover .rz,.card.sel .rz{opacity:1}
+
+  /* ---------- toolbar ---------- */
+  #bar{
+    position:fixed;top:14px;left:14px;display:flex;gap:6px;align-items:center;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:6px;box-shadow:var(--shadow);z-index:10;flex-wrap:wrap;max-width:calc(100vw - 28px);
+  }
+  #bar button{
+    font:inherit;font-size:13px;border:1px solid var(--line);background:#fff;color:var(--ink);
+    padding:6px 10px;border-radius:7px;cursor:pointer;white-space:nowrap;
+  }
+  #bar button:hover{background:#f6f5f2}
+  #bar button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  #bar button.primary:hover{filter:brightness(1.08)}
+  .sep{width:1px;height:22px;background:var(--line);margin:0 3px}
+  #title{
+    font:inherit;font-weight:650;font-size:14px;border:1px solid transparent;background:transparent;
+    padding:6px 8px;border-radius:7px;min-width:150px;color:var(--ink);
+  }
+  #title:hover{border-color:var(--line)}
+  #title:focus{outline:none;border-color:var(--accent);background:#fff}
+  .sw{width:22px;height:22px;border-radius:50%;border:1px solid rgba(0,0,0,.12);cursor:pointer;padding:0}
+  .sw:hover{transform:scale(1.12)}
+  .sw.on{box-shadow:0 0 0 2px #fff,0 0 0 4px var(--accent)}
+
+  #zoom{
+    position:fixed;bottom:14px;left:14px;display:flex;gap:4px;align-items:center;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:5px;
+    box-shadow:var(--shadow);z-index:10;
+  }
+  #zoom button{font:inherit;border:none;background:transparent;cursor:pointer;padding:5px 9px;border-radius:6px;font-size:14px}
+  #zoom button:hover{background:#f1efeb}
+  #pct{font-size:12px;color:var(--muted);min-width:44px;text-align:center;font-variant-numeric:tabular-nums}
+
+  #hint{
+    position:fixed;bottom:16px;right:14px;font-size:12px;color:var(--muted);z-index:10;
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 11px;
+    box-shadow:var(--shadow);
+  }
+  #hint b{color:var(--ink);font-weight:600}
+  #saved{
+    position:fixed;top:18px;right:16px;font-size:12px;color:var(--muted);z-index:10;
+    opacity:0;transition:opacity .25s;
+  }
+  #saved.show{opacity:1}
+  #empty{
+    position:fixed;inset:0;display:grid;place-content:center;text-align:center;
+    color:var(--muted);pointer-events:none;font-size:15px;line-height:1.7;
+  }
+  #empty b{color:var(--ink)}
+  #file{display:none}
+
+  /* ---------- storyboard mode ---------- */
+  .card .f{
+    display:none;align-items:center;gap:7px;padding:5px 8px 6px;
+    border-top:1px solid rgba(0,0,0,.08);background:rgba(255,255,255,.45);
+    font-size:11px;color:#4a463f;flex:0 0 auto;
+  }
+  body.sb .card .f{display:flex}
+  .card .n{
+    background:rgba(0,0,0,.72);color:#fff;font-weight:700;border-radius:5px;
+    padding:1px 6px;font-size:10px;font-variant-numeric:tabular-nums;flex:0 0 auto;
+  }
+  .card .tc{font-variant-numeric:tabular-nums;letter-spacing:.2px;flex:1;white-space:nowrap;overflow:hidden}
+  .card .d{
+    width:52px;font:inherit;font-size:11px;text-align:right;border:1px solid rgba(0,0,0,.15);
+    background:#fff;border-radius:5px;padding:2px 4px;color:inherit;
+    font-variant-numeric:tabular-nums;
+  }
+  .card .d:focus{outline:none;border-color:var(--accent)}
+
+  #tl{
+    display:none;position:fixed;left:186px;right:14px;bottom:14px;z-index:10;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:8px 10px;box-shadow:var(--shadow);
+  }
+  body.sb #tl{display:block}
+  body.sb #hint{display:none}
+  #tlhead{display:flex;align-items:baseline;gap:10px;margin-bottom:7px;font-size:12px;color:var(--muted)}
+  #tot{font-weight:700;font-size:14px;color:var(--ink);font-variant-numeric:tabular-nums}
+  #tot.over{color:#d6336c} #tot.ok{color:#2b8a3e}
+  #tgt{
+    width:52px;font:inherit;font-size:12px;border:1px solid var(--line);border-radius:6px;
+    padding:2px 5px;text-align:right;font-variant-numeric:tabular-nums;color:var(--ink);background:#fff;
+  }
+  #tgt:focus{outline:none;border-color:var(--accent)}
+  #tlbar{display:flex;gap:2px;height:30px}
+  #tlbar .seg{
+    border-radius:4px;min-width:3px;cursor:pointer;position:relative;overflow:hidden;
+    display:flex;align-items:center;justify-content:center;
+    font-size:10px;font-weight:650;color:rgba(0,0,0,.6);
+    border:1px solid rgba(0,0,0,.09);
+  }
+  #tlbar .seg:hover{filter:brightness(.95)}
+  #tlbar .seg.sel{outline:2px solid var(--accent);outline-offset:-2px}
+  #tlempty{font-size:12px;color:var(--muted);padding:6px 2px}
+</style>
+</head>
+<body>
+
+<div id="canvas"><div id="world"></div></div>
+
+<div id="empty">
+  <div><b>Double-click anywhere</b> to add a card.<br>Drag the background to pan. Scroll to zoom.</div>
+</div>
+
+<div id="bar">
+  <input id="title" value="Untitled board" spellcheck="false">
+  <span class="sep"></span>
+  <button class="primary" id="add">+ Card</button>
+  <span class="sep"></span>
+  <button class="sw" data-c="yellow" style="background:var(--c-yellow)" title="Yellow"></button>
+  <button class="sw" data-c="blue"   style="background:var(--c-blue)"   title="Blue"></button>
+  <button class="sw" data-c="green"  style="background:var(--c-green)"  title="Green"></button>
+  <button class="sw" data-c="pink"   style="background:var(--c-pink)"   title="Pink"></button>
+  <button class="sw" data-c="purple" style="background:var(--c-purple)" title="Purple"></button>
+  <button class="sw" data-c="orange" style="background:var(--c-orange)" title="Orange"></button>
+  <button class="sw" data-c="grey"   style="background:var(--c-grey)"   title="Grey"></button>
+  <span class="sep"></span>
+  <button id="dup">Duplicate</button>
+  <button id="del">Delete</button>
+  <span class="sep"></span>
+  <button id="undo">Undo</button>
+  <button id="redo">Redo</button>
+  <span class="sep"></span>
+  <button id="sb">Storyboard</button>
+  <span class="sep"></span>
+  <button id="exp">Export</button>
+  <button id="imp">Import</button>
+  <input type="file" id="file" accept="application/json">
+</div>
+
+<div id="zoom">
+  <button id="zout" title="Zoom out">–</button>
+  <span id="pct">100%</span>
+  <button id="zin" title="Zoom in">+</button>
+  <button id="fit" title="Fit to content">Fit</button>
+</div>
+
+<div id="tl">
+  <div id="tlhead">
+    <span id="tot">0.0s</span>
+    <span>target <input id="tgt" type="number" min="1" step="1" value="33"> s</span>
+    <span id="tlnote"></span>
+  </div>
+  <div id="tlbar"></div>
+</div>
+
+<div id="hint"><b>Dbl-click</b> card to edit · <b>Del</b> to remove · <b>Ctrl+Z</b> undo</div>
+<div id="saved">Saved</div>
+
+<script>
+"use strict";
+
+/* ============================ state ============================ */
+const KEY = "aios.storyboard.v1";
+const COLORS = ["yellow","blue","green","pink","purple","orange","grey"];
+
+let state = {
+  title: "Untitled board",
+  view: { x: 0, y: 0, s: 1 },
+  cards: []
+};
+let selected = null;
+let lastColor = "yellow";
+let undoStack = [], redoStack = [];
+let userMovedView = false;
+let sb = { on:false, target:33 };
+
+const $  = s => document.querySelector(s);
+const canvas = $("#canvas"), world = $("#world");
+
+/* ============================ persistence ============================ */
+function save(){
+  try{
+    localStorage.setItem(KEY, JSON.stringify({...state, sb}));
+    const el = $("#saved");
+    el.classList.add("show");
+    clearTimeout(save._t);
+    save._t = setTimeout(()=>el.classList.remove("show"), 900);
+  }catch(e){ console.warn("save failed", e); }
+}
+const saveSoon = debounce(save, 400);
+
+function load(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(!raw) return false;
+    const d = JSON.parse(raw);
+    if(!d || !Array.isArray(d.cards)) return false;
+    state = {
+      title: d.title || "Untitled board",
+      view : { x:num(d.view?.x,0), y:num(d.view?.y,0), s:clamp(num(d.view?.s,1),.2,3) },
+      cards: d.cards.map(normCard)
+    };
+    sb = { on: !!(d.sb && d.sb.on), target: Math.max(1, num(d.sb && d.sb.target, 33)) };
+    return true;
+  }catch(e){ console.warn("load failed", e); return false; }
+}
+
+function normCard(c){
+  return {
+    id   : c.id || uid(),
+    x    : num(c.x, 0),  y: num(c.y, 0),
+    w    : Math.max(140, num(c.w, 240)),
+    h    : Math.max(90,  num(c.h, 150)),
+    title: typeof c.title === "string" ? c.title : "",
+    body : typeof c.body  === "string" ? c.body  : "",
+    color: COLORS.includes(c.color) ? c.color : "yellow",
+    dur  : Math.max(0.5, num(c.dur, 3))
+  };
+}
+
+/* ============================ undo ============================ */
+function snapshot(){
+  undoStack.push(JSON.stringify({title:state.title, cards:state.cards}));
+  if(undoStack.length > 60) undoStack.shift();
+  redoStack.length = 0;
+}
+function applySnap(str){
+  const d = JSON.parse(str);
+  state.title = d.title;
+  state.cards = d.cards.map(normCard);
+  selected = null;
+  $("#title").value = state.title;
+  render(); save();
+}
+function undo(){
+  if(!undoStack.length) return;
+  redoStack.push(JSON.stringify({title:state.title, cards:state.cards}));
+  applySnap(undoStack.pop());
+}
+function redo(){
+  if(!redoStack.length) return;
+  undoStack.push(JSON.stringify({title:state.title, cards:state.cards}));
+  applySnap(redoStack.pop());
+}
+
+/* ==================== storyboard order + timing ==================== */
+/* Reading order: group cards into rows by vertical position, then left to
+   right. Move a card and its scene number follows automatically. */
+function ordered(){
+  const rows = [];
+  for(const c of [...state.cards].sort((a,b) => a.y - b.y)){
+    const r = rows.find(r => Math.abs(r.y - c.y) < 100);
+    if(r) r.items.push(c); else rows.push({ y:c.y, items:[c] });
+  }
+  rows.forEach(r => r.items.sort((a,b) => a.x - b.x));
+  return rows.flatMap(r => r.items);
+}
+
+function times(){
+  const map = new Map();
+  let t = 0;
+  ordered().forEach((c, i) => {
+    map.set(c.id, { i: i + 1, start: t, end: t + c.dur });
+    t += c.dur;
+  });
+  return { map, total: t };
+}
+
+function clock(sec){
+  const m = Math.floor(sec / 60);
+  const r = sec - m * 60;
+  return m + ":" + (r < 10 ? "0" : "") + (Number.isInteger(r) ? r : r.toFixed(1));
+}
+
+function refreshTimes(){
+  const res = times(), map = res.map, total = res.total;
+
+  for(const c of state.cards){
+    const el = world.querySelector('.card[data-id="' + c.id + '"]');
+    if(!el) continue;
+    const t = map.get(c.id);
+    const n = el.querySelector(".n"), tc = el.querySelector(".tc"), d = el.querySelector(".d");
+    if(n)  n.textContent  = "#" + t.i;
+    if(tc) tc.textContent = clock(t.start) + " - " + clock(t.end);
+    if(d && document.activeElement !== d) d.value = c.dur;
+  }
+
+  const tot = $("#tot"), note = $("#tlnote");
+  tot.textContent = total.toFixed(1) + "s";
+  const diff = +(total - sb.target).toFixed(1);
+  tot.className = Math.abs(diff) < 0.05 ? "ok" : (diff > 0 ? "over" : "");
+  note.textContent = !state.cards.length ? ""
+    : Math.abs(diff) < 0.05 ? "on target"
+    : diff > 0 ? diff.toFixed(1) + "s over" : Math.abs(diff).toFixed(1) + "s under";
+
+  const bar = $("#tlbar");
+  bar.textContent = "";
+  if(!state.cards.length){
+    const e = document.createElement("div");
+    e.id = "tlempty"; e.textContent = "No cards yet.";
+    bar.appendChild(e);
+    return;
+  }
+  for(const c of ordered()){
+    const seg = document.createElement("div");
+    seg.className = "seg" + (selected === c.id ? " sel" : "");
+    seg.style.flexGrow  = String(c.dur);
+    seg.style.flexBasis = "0";
+    seg.style.background = "var(--c-" + c.color + ")";
+    seg.title = (c.title || "Untitled") + " - " + c.dur + "s";
+    seg.dataset.id = c.id;
+    if(c.dur / (total || 1) > 0.06) seg.textContent = "#" + map.get(c.id).i;
+    bar.appendChild(seg);
+  }
+}
+
+/* ============================ render ============================ */
+function applyView(){
+  const {x,y,s} = state.view;
+  world.style.transform = `translate(${x}px, ${y}px) scale(${s})`;
+  const g = 24 * s;
+  canvas.style.backgroundSize = `${g}px ${g}px`;
+  canvas.style.backgroundPosition = `${x}px ${y}px`;
+  $("#pct").textContent = Math.round(s * 100) + "%";
+}
+
+function render(){
+  world.textContent = "";
+  for(const c of state.cards) world.appendChild(cardEl(c));
+  applyView();
+  $("#empty").style.display = state.cards.length ? "none" : "grid";
+  refreshTimes();
+}
+
+function cardEl(c){
+  const el = document.createElement("div");
+  el.className = "card" + (selected === c.id ? " sel" : "");
+  el.dataset.id = c.id;
+  el.style.cssText =
+    `left:${c.x}px;top:${c.y}px;width:${c.w}px;height:${c.h}px;background:var(--c-${c.color})`;
+
+  const t = document.createElement("div");
+  t.className = "t"; t.textContent = c.title;
+
+  const b = document.createElement("div");
+  b.className = "b"; b.textContent = c.body;
+
+  const f = document.createElement("div");
+  f.className = "f";
+  f.innerHTML = '<span class="n"></span><span class="tc"></span>' +
+                '<input class="d" type="number" min="0.5" step="0.5">';
+
+  const rz = document.createElement("div");
+  rz.className = "rz";
+
+  el.append(t, b, f, rz);
+  return el;
+}
+
+function patchCard(c){                       // update one card without a full re-render
+  const el = world.querySelector(`.card[data-id="${c.id}"]`);
+  if(!el) return;
+  el.style.left = c.x + "px"; el.style.top = c.y + "px";
+  el.style.width = c.w + "px"; el.style.height = c.h + "px";
+}
+
+function selectCard(id){
+  if(selected === id) return;
+  selected = id;
+  world.querySelectorAll(".card").forEach(el =>
+    el.classList.toggle("sel", el.dataset.id === id));
+  document.querySelectorAll("#tlbar .seg").forEach(el =>
+    el.classList.toggle("sel", el.dataset.id === id));
+}
+
+/* ============================ cards ============================ */
+function addCard(wx, wy, opts = {}){
+  snapshot();
+  const c = normCard({
+    x: Math.round(wx - 120), y: Math.round(wy - 60),
+    w: 240, h: 150, color: lastColor, ...opts
+  });
+  state.cards.push(c);
+  selected = c.id;
+  render(); save();
+
+  const el = world.querySelector(`.card[data-id="${c.id}"]`);
+  if(el) edit(el.querySelector(".t"));
+  return c;
+}
+
+function byId(id){ return state.cards.find(c => c.id === id); }
+
+function deleteSelected(){
+  if(!selected) return;
+  snapshot();
+  state.cards = state.cards.filter(c => c.id !== selected);
+  selected = null;
+  render(); save();
+}
+
+function duplicateSelected(){
+  const c = byId(selected);
+  if(!c) return;
+  snapshot();
+  const n = normCard({...c, id: uid(), x: c.x + 24, y: c.y + 24});
+  state.cards.push(n);
+  selected = n.id;
+  render(); save();
+}
+
+function setColor(name){
+  lastColor = name;
+  document.querySelectorAll(".sw").forEach(s => s.classList.toggle("on", s.dataset.c === name));
+  const c = byId(selected);
+  if(c){
+    snapshot();
+    c.color = name;
+    const el = world.querySelector(`.card[data-id="${c.id}"]`);
+    if(el) el.style.background = `var(--c-${name})`;
+    save();
+  }
+}
+
+/* ---- inline editing: single click selects, double click edits ---- */
+function edit(node){
+  if(!node) return;
+  node.contentEditable = "true";
+  node.focus();
+  const r = document.createRange();
+  r.selectNodeContents(node);
+  r.collapse(false);
+  const sel = getSelection();
+  sel.removeAllRanges(); sel.addRange(r);
+}
+
+function commitEdit(node){
+  const el = node.closest(".card");
+  const c  = byId(el?.dataset.id);
+  node.contentEditable = "false";
+  if(!c) return;
+  const val = node.textContent.replace(/ /g, " ");
+  const field = node.classList.contains("t") ? "title" : "body";
+  if(c[field] !== val){ snapshot(); c[field] = val; save(); }
+}
+
+/* ============================ coordinates ============================ */
+const toWorld = (sx, sy) => ({
+  x: (sx - state.view.x) / state.view.s,
+  y: (sy - state.view.y) / state.view.s
+});
+
+/* ============================ pointer interaction ============================ */
+let drag = null;   // {mode:'pan'|'move'|'resize', ...}
+
+canvas.addEventListener("pointerdown", e => {
+  if(e.button !== 0 && e.button !== 1) return;
+
+  const editing = document.activeElement;
+  if(editing && editing.isContentEditable && !editing.contains(e.target)) commitEdit(editing);
+
+  // duration field: select the card but never start a drag
+  if(e.target.tagName === "INPUT"){
+    const cn = e.target.closest(".card");
+    if(cn) selectCard(cn.dataset.id);
+    return;
+  }
+
+  const cardNode = e.target.closest(".card");
+
+  // resize handle
+  if(e.target.classList.contains("rz")){
+    const c = byId(cardNode.dataset.id);
+    snapshot();
+    selectCard(c.id);
+    drag = { mode:"resize", id:c.id, sx:e.clientX, sy:e.clientY, w0:c.w, h0:c.h };
+    canvas.setPointerCapture(e.pointerId);
+    return;
+  }
+
+  // already typing inside this field — let the browser handle the caret
+  if(e.target.isContentEditable) return;
+
+  // move a card
+  if(cardNode){
+    const c = byId(cardNode.dataset.id);
+    if(!c) return;
+    selectCard(c.id);
+    drag = { mode:"move", id:c.id, sx:e.clientX, sy:e.clientY, x0:c.x, y0:c.y, moved:false };
+    canvas.setPointerCapture(e.pointerId);
+    return;
+  }
+
+  // pan the board
+  selectCard(null);
+  drag = { mode:"pan", sx:e.clientX, sy:e.clientY, x0:state.view.x, y0:state.view.y };
+  canvas.classList.add("panning");
+  canvas.setPointerCapture(e.pointerId);
+});
+
+canvas.addEventListener("pointermove", e => {
+  if(!drag) return;
+  const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+
+  if(drag.mode === "pan"){
+    if(Math.hypot(dx,dy) > 3) userMovedView = true;
+    state.view.x = drag.x0 + dx;
+    state.view.y = drag.y0 + dy;
+    applyView();
+    return;
+  }
+
+  const c = byId(drag.id);
+  if(!c) return;
+
+  if(drag.mode === "move"){
+    if(!drag.moved && Math.hypot(dx, dy) > 3){ snapshot(); drag.moved = true; }
+    c.x = Math.round(drag.x0 + dx / state.view.s);
+    c.y = Math.round(drag.y0 + dy / state.view.s);
+  }else{
+    c.w = Math.max(140, Math.round(drag.w0 + dx / state.view.s));
+    c.h = Math.max(90,  Math.round(drag.h0 + dy / state.view.s));
+  }
+  patchCard(c);
+});
+
+function endDrag(e){
+  if(!drag) return;
+  if(drag.mode === "move") refreshTimes();   // order changes when a card moves
+  saveSoon();
+  canvas.classList.remove("panning");
+  try{ canvas.releasePointerCapture(e.pointerId); }catch(_){}
+  drag = null;
+}
+canvas.addEventListener("pointerup", endDrag);
+canvas.addEventListener("pointercancel", endDrag);
+
+/* double-click: empty canvas creates, card enters edit mode */
+canvas.addEventListener("dblclick", e => {
+  const cardNode = e.target.closest(".card");
+  if(cardNode){
+    const field = e.target.closest(".t, .b") || cardNode.querySelector(".b");
+    edit(field);
+    return;
+  }
+  const p = toWorld(e.clientX, e.clientY);
+  addCard(p.x, p.y);
+});
+
+document.addEventListener("focusout", e => {
+  if(e.target.isContentEditable) commitEdit(e.target);
+});
+
+/* duration edits */
+world.addEventListener("input", e => {
+  if(!e.target.classList.contains("d")) return;
+  const card = e.target.closest(".card");
+  const c = byId(card && card.dataset.id);
+  if(!c) return;
+  c.dur = Math.max(0.5, num(e.target.value, c.dur));
+  refreshTimes(); saveSoon();
+});
+world.addEventListener("change", e => {
+  if(e.target.classList.contains("d")) snapshot();
+});
+
+/* timeline: click a segment to jump to that card */
+$("#tlbar").addEventListener("click", e => {
+  const seg = e.target.closest(".seg");
+  if(!seg) return;
+  const c = byId(seg.dataset.id);
+  if(!c) return;
+  selectCard(c.id);
+  state.view.x = innerWidth  / 2 - (c.x + c.w / 2) * state.view.s;
+  state.view.y = innerHeight / 2 - (c.y + c.h / 2) * state.view.s;
+  userMovedView = true;
+  applyView(); saveSoon();
+});
+
+function setSb(on){
+  sb.on = on;
+  document.body.classList.toggle("sb", on);
+  $("#sb").classList.toggle("primary", on);
+  refreshTimes(); save();
+}
+
+/* ============================ zoom ============================ */
+canvas.addEventListener("wheel", e => {
+  e.preventDefault();
+  userMovedView = true;
+  const s0 = state.view.s;
+  const s1 = clamp(s0 * Math.pow(0.999, e.deltaY), 0.2, 3);
+  state.view.x = e.clientX - (e.clientX - state.view.x) * (s1 / s0);
+  state.view.y = e.clientY - (e.clientY - state.view.y) * (s1 / s0);
+  state.view.s = s1;
+  applyView();
+  saveSoon();
+}, { passive:false });
+
+function zoomBy(f){
+  userMovedView = true;
+  const cx = innerWidth / 2, cy = innerHeight / 2, s0 = state.view.s;
+  const s1 = clamp(s0 * f, 0.2, 3);
+  state.view.x = cx - (cx - state.view.x) * (s1 / s0);
+  state.view.y = cy - (cy - state.view.y) * (s1 / s0);
+  state.view.s = s1;
+  applyView(); saveSoon();
+}
+
+function fit(){
+  if(!state.cards.length){
+    state.view = { x:0, y:0, s:1 }; applyView(); return;
+  }
+  const padX = 60, padTop = 110, padBot = 70;   // room for the toolbar and zoom bar
+  const x1 = Math.min(...state.cards.map(c => c.x));
+  const y1 = Math.min(...state.cards.map(c => c.y));
+  const x2 = Math.max(...state.cards.map(c => c.x + c.w));
+  const y2 = Math.max(...state.cards.map(c => c.y + c.h));
+  const availW = Math.max(200, innerWidth  - padX * 2);
+  const availH = Math.max(200, innerHeight - padTop - padBot);
+  const s = clamp(Math.min(availW / (x2 - x1), availH / (y2 - y1)), 0.25, 1.6);
+  state.view.s = s;
+  state.view.x = padX   + (availW - (x2 - x1) * s) / 2 - x1 * s;
+  state.view.y = padTop + (availH - (y2 - y1) * s) / 2 - y1 * s;
+  applyView(); saveSoon();
+}
+
+/* ============================ keyboard ============================ */
+addEventListener("keydown", e => {
+  const typing = document.activeElement &&
+    (document.activeElement.isContentEditable || document.activeElement.tagName === "INPUT");
+
+  if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z"){
+    e.preventDefault(); e.shiftKey ? redo() : undo(); return;
+  }
+  if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y"){ e.preventDefault(); redo(); return; }
+  if(typing){
+    if(e.key === "Escape") document.activeElement.blur();
+    return;
+  }
+  if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d"){ e.preventDefault(); duplicateSelected(); return; }
+  if(e.key === "Delete" || e.key === "Backspace"){ e.preventDefault(); deleteSelected(); return; }
+  if(e.key === "Escape") selectCard(null);
+  if(e.key === "n" || e.key === "N"){
+    const p = toWorld(innerWidth/2, innerHeight/2);
+    addCard(p.x, p.y);
+  }
+});
+
+/* ============================ import / export ============================ */
+function exportJSON(){
+  const name = (state.title || "board").replace(/[^\w\-. ]+/g, "_").trim() || "board";
+  const blob = new Blob([JSON.stringify({...state, sb}, null, 2)], { type:"application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name + ".storyboard.json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+$("#file").addEventListener("change", e => {
+  const f = e.target.files[0];
+  if(!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try{
+      const d = JSON.parse(r.result);
+      if(!d || !Array.isArray(d.cards)) throw new Error("not a storyboard file");
+      snapshot();
+      state.title = d.title || "Imported board";
+      state.cards = d.cards.map(normCard);
+      if(d.view) state.view = { x:num(d.view.x,0), y:num(d.view.y,0), s:clamp(num(d.view.s,1),.2,3) };
+      selected = null;
+      $("#title").value = state.title;
+      render(); save();
+    }catch(err){ alert("Could not read that file: " + err.message); }
+    e.target.value = "";
+  };
+  r.readAsText(f);
+});
+
+/* ============================ wiring ============================ */
+$("#add").onclick  = () => { const p = toWorld(innerWidth/2, innerHeight/2); addCard(p.x, p.y); };
+$("#del").onclick  = deleteSelected;
+$("#dup").onclick  = duplicateSelected;
+$("#undo").onclick = undo;
+$("#redo").onclick = redo;
+$("#sb").onclick   = () => setSb(!sb.on);
+$("#tgt").addEventListener("input", e => {
+  sb.target = Math.max(1, num(e.target.value, 33));
+  refreshTimes(); saveSoon();
+});
+$("#exp").onclick  = exportJSON;
+$("#imp").onclick  = () => $("#file").click();
+$("#zin").onclick  = () => zoomBy(1.2);
+$("#zout").onclick = () => zoomBy(1/1.2);
+$("#fit").onclick  = fit;
+document.querySelectorAll(".sw").forEach(s => s.onclick = () => setColor(s.dataset.c));
+$("#title").addEventListener("input", e => { state.title = e.target.value; saveSoon(); });
+
+/* ============================ helpers ============================ */
+function uid(){ return "c" + Math.random().toString(36).slice(2,9); }
+function clamp(v,a,b){ return Math.min(b, Math.max(a, v)); }
+function num(v,d){ return Number.isFinite(+v) ? +v : d; }
+function debounce(fn,ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; }
+
+/* ============================ boot ============================ */
+if(!load()){
+  state.title = "WOP-001 — Our Humans Are Busy";
+  const beats = [
+    ["S1  0:00–0:03","Wide hero. Team Lead front, three teammates behind. Nobody smiles.\nCAPTION: WE ARE OMNIWINK"],
+    ["S2  0:03–0:06","Slow push to Team Lead. He speaks.\n“This is Wopie.”  ← LIP-SYNC TEST\nCAPTION: MEET WOPIE"],
+    ["S3  0:06–0:10","Three product close-ups: task received / work completed / approval requested.\nCAPTION: AN AI EMPLOYEE → WORKS INSIDE SLACK"],
+    ["S4  0:10–0:14","Back to the group. “It finishes the boring work, and it asks before doing anything important.”"],
+    ["S5  0:14–0:17","Tighter on Team Lead. Still serious. Beat of silence."],
+    ["S6  0:17–0:20","Off-camera VO (second voice): “Can you all look a bit more excited?”"],
+    ["S7  0:20–0:23","Forced smiles. Teammate B raises a LATE thumbs-up.\nCAPTION: HUMANS CURRENTLY BUSY"],
+    ["S8  0:23–0:27","Wopie notification + chime. “Launch checklist completed. Awaiting approval.”\nOn screen 2.5s min.\nCAPTION: AWAITING APPROVAL"],
+    ["S9  0:27–0:30","Everyone turns to the Team Lead.\n“Wopie is more prepared than we are.”"],
+    ["S10 0:30–0:33","Final hero. One person still awkwardly smiling.\n“Follow the launch. We clearly need supervision.” + logo"]
+  ];
+  const palette = ["blue","blue","purple","blue","grey","orange","yellow","purple","yellow","green"];
+  const durs    = [3, 3, 4, 4, 3, 3, 3, 4, 3, 3];   // totals 33s
+  beats.forEach(([t,b],i) => {
+    state.cards.push(normCard({
+      x: (i % 5) * 280, y: Math.floor(i / 5) * 258,
+      w: 250, h: 226, title: t, body: b, color: palette[i], dur: durs[i]
+    }));
+  });
+  sb = { on:true, target:33 };
+}
+$("#title").value = state.title;
+$("#tgt").value = sb.target;
+setColor(lastColor);
+setSb(sb.on);
+render();
+const needsFit = state.view.x === 0 && state.view.y === 0 && state.cards.length;
+if(needsFit) requestAnimationFrame(() => requestAnimationFrame(fit));
+addEventListener("resize", debounce(() => { if(!userMovedView) fit(); }, 150));
+</script>
+</body>
+</html>

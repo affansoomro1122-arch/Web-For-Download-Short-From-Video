@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ShortsForge</title>
+  <meta name="description" content="Turn any long YouTube video into multiple 1 to 1.5 minute Shorts for YouTube and TikTok." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23FFD400'/><path d='M12 9l11 7-11 7z' fill='%23000'/></svg>" />
+</head>
+<body>
+  <div class="glow" aria-hidden="true"></div>
+
+  <header class="nav">
+    <a href="/" class="brand">
+      <span class="brand-mark"><svg viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></svg></span>
+      Shorts<b>Forge</b>
+    </a>
+    <span class="nav-tag">YouTube Shorts · TikTok · Reels</span>
+  </header>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Long video in. Viral-ready shorts out.</p>
+      <h1>Turn one long video into <span class="hl">many Shorts</span></h1>
+      <p class="sub">Paste a YouTube link. We split it into vertical 9:16 clips of 1 to 1.5 minutes each, cut at natural pauses, and ready to download.</p>
+
+      <form id="form" class="card form" autocomplete="off">
+        <div class="url-row">
+          <svg class="url-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
+          <input id="url" type="url" placeholder="https://www.youtube.com/watch?v=..." required aria-label="YouTube video URL" />
+          <button id="paste" type="button" class="btn ghost small" title="Paste from clipboard">Paste</button>
+        </div>
+
+        <div class="options">
+          <div class="opt wide">
+            <label>Short length</label>
+            <div class="seg" id="length">
+              <button type="button" data-min="60" data-max="90" class="on">Auto 1:00–1:30</button>
+              <button type="button" data-min="60" data-max="60">1:00</button>
+              <button type="button" data-min="90" data-max="90">1:30</button>
+            </div>
+          </div>
+          <div class="opt wide">
+            <label>Vertical style</label>
+            <div class="seg" id="mode">
+              <button type="button" data-v="blur" class="on">Blur fill</button>
+              <button type="button" data-v="crop">Center crop</button>
+            </div>
+          </div>
+          <div class="opt">
+            <label for="quality">Quality</label>
+            <select id="quality">
+              <option value="1080">1080 × 1920 (HD)</option>
+              <option value="720">720 × 1280 (faster)</option>
+            </select>
+          </div>
+          <div class="opt">
+            <label for="count">Max shorts</label>
+            <select id="count">
+              <option value="5">5</option>
+              <option value="10" selected>10</option>
+              <option value="20">20</option>
+              <option value="50">All (up to 50)</option>
+            </select>
+          </div>
+          <div class="opt wide">
+            <label>"Part" title on video</label>
+            <div class="seg" id="titles">
+              <button type="button" data-v="1" class="on">On (Part 1, Part 2...)</button>
+              <button type="button" data-v="0">Off</button>
+            </div>
+          </div>
+        </div>
+
+        <button id="go" type="submit" class="btn primary big">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>
+          Generate Shorts
+        </button>
+        <p id="formError" class="form-error" role="alert"></p>
+      </form>
+    </section>
+
+    <section id="progress" class="card progress hidden" aria-live="polite">
+      <div class="prog-head">
+        <img id="srcThumb" alt="" />
+        <div>
+          <p id="srcTitle" class="src-title">Preparing...</p>
+          <p id="stage" class="stage">Starting...</p>
+        </div>
+        <span id="pct" class="pct">0%</span>
+      </div>
+      <div class="bar"><div id="barFill"></div></div>
+    </section>
+
+    <section id="results" class="hidden">
+      <div class="results-head">
+        <h2><span id="count-done">0</span> Shorts <span class="muted" id="count-total"></span></h2>
+        <div class="results-actions">
+          <a id="zip" class="btn ghost hidden" href="#">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 21h16"/></svg>
+            Download all (ZIP)
+          </a>
+          <button id="again" class="btn ghost hidden" type="button">New video</button>
+        </div>
+      </div>
+      <div id="grid" class="grid"></div>
+    </section>
+
+    <section class="how">
+      <div class="step"><span>1</span><h3>Paste a link</h3><p>Any public YouTube video longer than one minute.</p></div>
+      <div class="step"><span>2</span><h3>We slice it</h3><p>Silence detection finds natural pauses, so no clip cuts off mid-sentence.</p></div>
+      <div class="step"><span>3</span><h3>Download</h3><p>Vertical 9:16 MP4s, ready for YouTube Shorts, TikTok and Reels.</p></div>
+    </section>
+  </main>
+
+  <footer>Only use videos you own or have permission to repost.</footer>
+
+  <template id="cardTpl">
+    <article class="short">
+      <div class="player">
+        <video preload="metadata" controls playsinline></video>
+        <span class="badge"></span>
+      </div>
+      <div class="short-body">
+        <div class="short-meta">
+          <strong class="short-title"></strong>
+          <span class="short-range"></span>
+        </div>
+        <a class="btn primary dl" download>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 21h16"/></svg>
+          Download
+        </a>
+      </div>
+    </article>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
